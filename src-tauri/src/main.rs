@@ -709,6 +709,21 @@ fn drain_notifications(app_state: tauri::State<AppState>) -> Vec<Notify> {
 
 #[tokio::main]
 async fn main() {
+    let mut directory_arg: Option<String> = None;
+    let args: Vec<String> = std::env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "--directory" && i + 1 < args.len() {
+            directory_arg = Some(args[i + 1].clone());
+            i += 2;
+        } else if let Some(value) = args[i].strip_prefix("--directory=") {
+            directory_arg = Some(value.to_string());
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -719,12 +734,26 @@ async fn main() {
             player: Default::default(),
             queued_notifications: std::sync::Mutex::new(Vec::new()),
         })
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle();
 
             let app_state: State<AppState> = handle.state();
             let db = db::initialize_database(&handle).expect("Database initialize should succeed");
             *app_state.db.lock().unwrap() = Some(db);
+
+            if let Some(ref dir) = directory_arg {
+                let path = std::path::Path::new(dir);
+                if !path.is_dir() {
+                    eprintln!("Warning: --directory path '{}' is not a valid directory", dir);
+                } else {
+                    let conn_guard = app_state.db.lock().unwrap();
+                    let conn = conn_guard.as_ref().unwrap();
+                    db::set_directories(vec![dir.clone()], conn)
+                        .expect("Failed to set directory from --directory argument");
+                    db::set_init(false, conn)
+                        .expect("Failed to reset library initialization state");
+                }
+            }
 
             let maybe_player = Player::new();
             match maybe_player {
