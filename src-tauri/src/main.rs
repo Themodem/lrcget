@@ -742,12 +742,17 @@ async fn main() {
             *app_state.db.lock().unwrap() = Some(db);
 
             if let Some(ref dir) = directory_arg {
-                let conn_guard = app_state.db.lock().unwrap();
-                let conn = conn_guard.as_ref().unwrap();
-                db::set_directories(vec![dir.clone()], conn)
-                    .expect("Failed to set directory from --directory argument");
-                db::set_init(false, conn)
-                    .expect("Failed to reset library initialization state");
+                let path = std::path::Path::new(dir);
+                if !path.is_dir() {
+                    eprintln!("Warning: --directory path '{}' is not a valid directory", dir);
+                } else {
+                    let conn_guard = app_state.db.lock().unwrap();
+                    let conn = conn_guard.as_ref().unwrap();
+                    db::set_directories(vec![dir.clone()], conn)
+                        .expect("Failed to set directory from --directory argument");
+                    db::set_init(false, conn)
+                        .expect("Failed to reset library initialization state");
+                }
             }
 
             let maybe_player = Player::new();
